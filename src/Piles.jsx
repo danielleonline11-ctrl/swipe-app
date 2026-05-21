@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { savePiles } from './storage.js'
 
 const PILES = [
   { key: 'engage', label: 'Engage' },
@@ -7,9 +8,41 @@ const PILES = [
   { key: 'drop', label: 'Drop' },
 ]
 
-export default function Piles({ piles }) {
+export default function Piles({ piles, setPiles }) {
   const [active, setActive] = useState('engage')
+  const [editingId, setEditingId] = useState(null)
+  const [commentText, setCommentText] = useState('')
+
   const list = piles[active] || []
+
+  function startUnblock(cardId) {
+    setEditingId(cardId)
+    setCommentText('')
+  }
+
+  function cancelUnblock() {
+    setEditingId(null)
+    setCommentText('')
+  }
+
+  function commitUnblock(card) {
+    const trimmed = commentText.trim()
+    if (!trimmed) return
+    const updated = {
+      ...card,
+      comment: trimmed,
+      unblockedAt: new Date().toISOString(),
+    }
+    const newPiles = {
+      ...piles,
+      blocked: piles.blocked.filter((c) => c.id !== card.id),
+      engage: [...piles.engage, updated],
+    }
+    setPiles(newPiles)
+    savePiles(newPiles)
+    setEditingId(null)
+    setCommentText('')
+  }
 
   return (
     <div className="piles">
@@ -31,7 +64,44 @@ export default function Piles({ piles }) {
         ) : (
           list.map((card) => (
             <div key={card.id} className={`pile-card ${active}`}>
-              {card.label}
+              <div className="card-text">{card.label}</div>
+              {card.comment && (
+                <div className="card-comment">“{card.comment}”</div>
+              )}
+              {active === 'blocked' && editingId !== card.id && (
+                <button
+                  className="unblock-btn"
+                  onClick={() => startUnblock(card.id)}
+                >
+                  Unblock with comment →
+                </button>
+              )}
+              {active === 'blocked' && editingId === card.id && (
+                <div className="unblock-form">
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="What changed? What info did you get? Why is this now actionable?"
+                    rows={3}
+                    autoFocus
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  <div className="unblock-actions">
+                    <button className="cancel" onClick={cancelUnblock}>
+                      Cancel
+                    </button>
+                    <button
+                      className="submit"
+                      onClick={() => commitUnblock(card)}
+                      disabled={!commentText.trim()}
+                    >
+                      Move to Engage
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
