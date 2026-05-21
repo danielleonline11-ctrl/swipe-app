@@ -5,8 +5,8 @@ let cachedClient = null
 
 export async function getClient() {
   if (cachedClient) return cachedClient
-  const username = process.env.APPLE_ID
-  const password = process.env.APPLE_APP_PASSWORD
+  const username = (process.env.APPLE_ID || '').trim()
+  const password = (process.env.APPLE_APP_PASSWORD || '').trim()
   if (!username || !password) {
     throw new Error('Missing APPLE_ID or APPLE_APP_PASSWORD env vars')
   }
