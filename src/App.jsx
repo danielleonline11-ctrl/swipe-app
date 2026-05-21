@@ -58,7 +58,7 @@ export default function App() {
             setScreen={setScreen}
           />
         )}
-        {screen === 'piles' && <Piles piles={piles} />}
+        {screen === 'piles' && <Piles piles={piles} setPiles={setPiles} />}
       </main>
     </div>
   )
