@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import Upload from './Upload.jsx'
+import Load from './Load.jsx'
 import Swipe from './Swipe.jsx'
 import Piles from './Piles.jsx'
 import { loadScreen, saveScreen, loadDeck, loadPiles, clearAll } from './storage.js'
@@ -12,21 +12,21 @@ export default function App() {
   useEffect(() => { saveScreen(screen) }, [screen])
 
   function resetAll() {
-    if (!window.confirm('Clear deck and all piles? This cannot be undone.')) return
+    if (!window.confirm('Clear deck, piles, and all cached data? This cannot be undone.')) return
     clearAll()
     setDeck([])
     setPiles({ engage: [], skip: [], blocked: [], drop: [] })
-    setScreen('upload')
+    setScreen('load')
   }
 
   return (
     <div className="app">
       <nav className="nav">
         <button
-          className={screen === 'upload' ? 'active' : ''}
-          onClick={() => setScreen('upload')}
+          className={screen === 'load' ? 'active' : ''}
+          onClick={() => setScreen('load')}
         >
-          Upload
+          Load
         </button>
         <button
           className={screen === 'swipe' ? 'active' : ''}
@@ -46,8 +46,8 @@ export default function App() {
         </button>
       </nav>
       <main>
-        {screen === 'upload' && (
-          <Upload deck={deck} setDeck={setDeck} setScreen={setScreen} />
+        {screen === 'load' && (
+          <Load deck={deck} setDeck={setDeck} setScreen={setScreen} />
         )}
         {screen === 'swipe' && (
           <Swipe
