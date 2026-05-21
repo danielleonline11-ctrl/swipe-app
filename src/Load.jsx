@@ -1,156 +1,221 @@
-import { useEffect, useState } from 'react'
-import {
-  saveDeck,
-  saveSource,
-  saveLists,
-  saveLastFetch,
-  loadLastFetch,
-  loadLists,
-  loadSource,
-} from './storage.js'
-import { fetchQueue, fetchList, fetchLists } from './api.js'
+import { useState, useRef } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { saveDeck, saveSource } from './storage.js'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
+
+const CHECKBOX_REGEX = /^[\s•\-–—*▢☐☑✓✔︎❑❒❐□■▪◯○●⦿◉◎⚪⚫]+\s*/
+
+function cleanLine(raw) {
+  return raw.replace(CHECKBOX_REGEX, '').trim()
+}
+
+async function extractLinesFromPdf(file) {
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+  const lines = []
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const tc = await page.getTextContent()
+    let current = ''
+    let lastY = null
+    for (const item of tc.items) {
+      const y = item.transform?.[5]
+      const newLine = lastY !== null && Math.abs(y - lastY) > 2
+      if (newLine) {
+        const cleaned = cleanLine(current)
+        if (cleaned) lines.push(cleaned)
+        current = ''
+      }
+      current += item.str
+      lastY = y
+    }
+    const cleaned = cleanLine(current)
+    if (cleaned) lines.push(cleaned)
+  }
+  return lines
+}
 
 export default function Load({ deck, setDeck, setScreen }) {
-  const [source, setSource] = useState(loadSource())
-  const [lists, setLists] = useState(loadLists())
-  const [lastFetch, setLastFetch] = useState(loadLastFetch())
-  const [loading, setLoading] = useState(false)
+  const [listName, setListName] = useState('')
+  const [pasteText, setPasteText] = useState('')
+  const [parsing, setParsing] = useState(false)
   const [error, setError] = useState(null)
-  const [meta, setMeta] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const fileRef = useRef(null)
 
-  useEffect(() => {
-    if (lists.length === 0) refreshLists()
-  }, [])
-
-  async function refreshLists() {
-    try {
-      const data = await fetchLists()
-      const names = (data.lists || []).map((l) => l.name).filter(Boolean)
-      setLists(names)
-      saveLists(names)
-    } catch (err) {
-      setError(`Could not load lists: ${err.message}`)
-    }
-  }
-
-  async function loadDeck(targetSource) {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = targetSource === 'queue'
-        ? await fetchQueue()
-        : await fetchList(targetSource)
-
-      const reminders = data.queue || data.reminders || []
-      const cards = reminders.map((r) => ({
-        id: r.uid || r.id,
-        uid: r.uid,
-        label: r.label,
-        description: r.description,
-        list: r.list,
-        dueAt: r.dueAt,
-        createdAt: r.createdAt,
+  function makeCards(lines, source) {
+    return lines
+      .filter((l) => l.length > 1)
+      .map((label, i) => ({
+        id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        label,
+        list: source || 'Imported',
+        description: '',
       }))
+  }
 
-      setDeck(cards)
-      saveDeck(cards)
-      setSource(targetSource)
-      saveSource(targetSource)
-      const now = Date.now()
-      setLastFetch(now)
-      saveLastFetch(now)
-      setMeta({ count: cards.length, breakdown: data.breakdown })
-      setScreen('swipe')
+  async function handlePdf(file) {
+    if (!file) return
+    setError(null)
+    setParsing(true)
+    setPreview(null)
+    try {
+      const lines = await extractLinesFromPdf(file)
+      const source = listName.trim() || file.name.replace(/\.pdf$/i, '') || 'Imported'
+      const cards = makeCards(lines, source)
+      setPreview({ lines: lines.length, cards: cards.length, source, sample: cards.slice(0, 5).map((c) => c.label) })
+      stageDeck(cards, source)
     } catch (err) {
-      setError(err.message)
+      setError(`PDF parse failed: ${err.message}`)
     } finally {
-      setLoading(false)
+      setParsing(false)
     }
   }
 
-  function shuffle() {
-    const shuffled = [...deck]
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  function handlePaste() {
+    const lines = pasteText.split('\n').map(cleanLine).filter(Boolean)
+    if (lines.length === 0) {
+      setError('No reminders found in pasted text.')
+      return
     }
-    setDeck(shuffled)
-    saveDeck(shuffled)
+    const source = listName.trim() || 'Pasted'
+    const cards = makeCards(lines, source)
+    setPreview({ lines: lines.length, cards: cards.length, source, sample: cards.slice(0, 5).map((c) => c.label) })
+    stageDeck(cards, source)
+    setPasteText('')
+  }
+
+  function stageDeck(cards, source) {
+    setDeck(cards)
+    saveDeck(cards)
+    saveSource(source)
+  }
+
+  function startSwipe() {
     setScreen('swipe')
   }
 
-  const fetchAge = lastFetch ? Math.round((Date.now() - lastFetch) / 60000) : null
-  const ageLabel = fetchAge === null
-    ? 'Never loaded'
-    : fetchAge < 1 ? 'Just now' : `${fetchAge}m ago`
+  function appendToDeck(file) {
+    if (!file) return
+    setError(null)
+    setParsing(true)
+    extractLinesFromPdf(file)
+      .then((lines) => {
+        const source = listName.trim() || file.name.replace(/\.pdf$/i, '') || 'Imported'
+        const cards = makeCards(lines, source)
+        const merged = [...deck, ...cards]
+        setDeck(merged)
+        saveDeck(merged)
+        setPreview({ lines: lines.length, cards: cards.length, source, appended: true, sample: cards.slice(0, 5).map((c) => c.label) })
+      })
+      .catch((err) => setError(`PDF parse failed: ${err.message}`))
+      .finally(() => setParsing(false))
+  }
 
   return (
     <div className="load">
       <h1>Load reminders</h1>
-      <p className="hint">Pull cards from Apple Reminders via iCloud.</p>
+      <p className="hint">Stopgap: upload a PDF or paste text. Native integration coming later.</p>
 
       <div className="load-section">
-        <label className="load-label">Queue (default)</label>
-        <p className="load-sub">Triage + This Week + due in 30d + 20 oldest backfill.</p>
+        <label className="load-label">Source label (optional)</label>
+        <input
+          className="load-input"
+          type="text"
+          value={listName}
+          onChange={(e) => setListName(e.target.value)}
+          placeholder="e.g. Wedding, Triage, Career"
+          autoCapitalize="words"
+          autoCorrect="off"
+        />
+        <p className="load-sub">Tags every card from this upload with this list name. Defaults to the PDF filename.</p>
+      </div>
+
+      <div className="load-section">
+        <label className="load-label">PDF upload</label>
+        <p className="load-sub">Print your Reminders list to PDF (File → Print → Save as PDF) and upload it here.</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) handlePdf(f)
+            e.target.value = ''
+          }}
+        />
         <button
           className="primary"
-          onClick={() => loadDeck('queue')}
-          disabled={loading}
+          onClick={() => fileRef.current?.click()}
+          disabled={parsing}
         >
-          {loading && source === 'queue' ? 'Loading…' : 'Load queue'}
+          {parsing ? 'Parsing…' : 'Choose PDF'}
         </button>
+        {deck.length > 0 && (
+          <button
+            className="secondary"
+            onClick={() => {
+              const input = document.createElement('input')
+              input.type = 'file'
+              input.accept = 'application/pdf,.pdf'
+              input.onchange = (e) => {
+                const f = e.target.files?.[0]
+                if (f) appendToDeck(f)
+              }
+              input.click()
+            }}
+            disabled={parsing}
+            style={{ marginTop: '8px' }}
+          >
+            Append another PDF to current deck
+          </button>
+        )}
       </div>
 
       <div className="load-section">
-        <label className="load-label">Or one list</label>
-        <div className="list-grid">
-          {lists.length === 0 ? (
-            <p className="load-sub">No lists cached. <button className="link" onClick={refreshLists}>Refresh lists</button></p>
-          ) : (
-            lists.map((name) => (
-              <button
-                key={name}
-                className={`list-chip ${source === name ? 'active' : ''}`}
-                onClick={() => loadDeck(name)}
-                disabled={loading}
-              >
-                {name}
-              </button>
-            ))
-          )}
+        <label className="load-label">Or paste lines</label>
+        <textarea
+          value={pasteText}
+          onChange={(e) => setPasteText(e.target.value)}
+          placeholder={'One reminder per line…\nFold the seat tags\nReview videographers in portal\nSchedule June facial'}
+          rows={6}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck="false"
+        />
+        <button
+          className="secondary"
+          onClick={handlePaste}
+          disabled={!pasteText.trim()}
+        >
+          Build deck from paste
+        </button>
+      </div>
+
+      {deck.length > 0 && (
+        <div className="load-actions">
+          <button className="primary" onClick={startSwipe} style={{ flex: 1 }}>
+            Swipe {deck.length} card{deck.length === 1 ? '' : 's'} →
+          </button>
         </div>
-      </div>
+      )}
 
-      <div className="load-meta">
-        <span>Last load: {ageLabel}</span>
-        <span>Source: {source}</span>
-        <span>Deck: {deck.length}</span>
-      </div>
-
-      <div className="load-actions">
-        <button
-          className="secondary"
-          onClick={shuffle}
-          disabled={deck.length === 0}
-        >
-          Shuffle current deck
-        </button>
-        <button
-          className="secondary"
-          onClick={refreshLists}
-          disabled={loading}
-        >
-          Refresh list names
-        </button>
-      </div>
-
-      {meta && (
+      {preview && (
         <div className="load-status">
-          Loaded {meta.count} cards.
-          {meta.breakdown && (
-            <span className="breakdown">
-              {' '}({meta.breakdown.priority} priority · {meta.breakdown.dueSoon} due-soon · {meta.breakdown.backfill} backfill)
-            </span>
+          {preview.appended ? 'Appended ' : 'Loaded '}{preview.cards} cards from "{preview.source}"
+          {preview.lines !== preview.cards && (
+            <span className="breakdown"> ({preview.lines} raw lines, dropped empties + headers)</span>
+          )}
+          {preview.sample?.length > 0 && (
+            <ul className="preview-list">
+              {preview.sample.map((s, i) => (<li key={i}>{s}</li>))}
+              {preview.cards > preview.sample.length && (
+                <li className="more">…and {preview.cards - preview.sample.length} more</li>
+              )}
+            </ul>
           )}
         </div>
       )}
@@ -159,7 +224,6 @@ export default function Load({ deck, setDeck, setScreen }) {
         <div className="load-error">
           <strong>Load failed.</strong>
           <pre>{error}</pre>
-          <p className="load-sub">Check that Vercel env vars (APPLE_ID + APPLE_APP_PASSWORD) are set, and CalDAV is reachable.</p>
         </div>
       )}
     </div>

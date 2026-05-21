@@ -1,41 +1,18 @@
-async function jsonOrThrow(res) {
-  if (!res.ok) {
-    let body = ''
-    try { body = await res.text() } catch {}
-    throw new Error(`${res.status} ${res.statusText} — ${body}`)
-  }
-  return res.json()
-}
-
-export async function fetchQueue() {
-  const res = await fetch('/api/reminders')
-  return jsonOrThrow(res)
-}
-
-export async function fetchList(name) {
-  const res = await fetch(`/api/reminders?list=${encodeURIComponent(name)}`)
-  return jsonOrThrow(res)
-}
-
-export async function fetchLists() {
-  const res = await fetch('/api/lists')
-  return jsonOrThrow(res)
-}
+// PDF-upload stopgap: no backend reminders source.
+// Notes and child-reminder creation are queued in localStorage for a future
+// native integration to drain. For now these are no-ops that resolve OK so
+// the UI keeps working.
 
 export async function postNote({ uid, note, listName }) {
-  const res = await fetch('/api/note', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ uid, note, listName }),
-  })
-  return jsonOrThrow(res)
+  const queue = JSON.parse(localStorage.getItem('swipe-app:pendingNotes') || '[]')
+  queue.push({ uid, note, listName, at: new Date().toISOString() })
+  localStorage.setItem('swipe-app:pendingNotes', JSON.stringify(queue))
+  return { ok: true, queued: true }
 }
 
 export async function createReminder({ summary, listName, description, parentUid }) {
-  const res = await fetch('/api/create', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ summary, listName, description, parentUid }),
-  })
-  return jsonOrThrow(res)
+  const queue = JSON.parse(localStorage.getItem('swipe-app:pendingCreates') || '[]')
+  queue.push({ summary, listName, description, parentUid, at: new Date().toISOString() })
+  localStorage.setItem('swipe-app:pendingCreates', JSON.stringify(queue))
+  return { ok: true, queued: true }
 }

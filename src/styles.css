@@ -179,6 +179,51 @@ main {
   color: var(--ink-soft);
   font-size: 12px;
 }
+.load-input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.load-input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.load textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 120px;
+  margin-bottom: 8px;
+}
+.load textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.load textarea::placeholder { color: var(--ink-muted); }
+.preview-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--rule);
+}
+.preview-list li {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 2px 0;
+  line-height: 1.35;
+}
+.preview-list li.more {
+  font-style: italic;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
 .load-error {
   background: rgba(231, 111, 81, 0.1);
   border: 1px solid var(--drop);
