@@ -98,6 +98,49 @@ main {
   color: var(--ink-soft);
   margin-bottom: 10px;
 }
+.load-sub code {
+  background: var(--bg-deep);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.baked-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+.baked-list-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.baked-list-btn:hover:not(:disabled) {
+  background: #404040;
+  border-color: var(--accent);
+}
+.baked-list-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.baked-list-name { font-weight: 500; }
+.baked-list-meta {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-weight: 400;
+}
 .load .primary {
   width: 100%;
   background: var(--accent);

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { saveDeck, saveSource } from './storage.js'
@@ -7,8 +7,27 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
 
 const CHECKBOX_REGEX = /^[\s•\-–—*▢☐☑✓✔︎❑❒❐□■▪◯○●⦿◉◎⚪⚫]+\s*/
 
+const BAKED_LISTS = [
+  { name: 'Wedding', slug: 'wedding' },
+  { name: 'This Week', slug: 'this-week' },
+  { name: 'Triage', slug: 'triage' },
+  { name: 'Basic Needs', slug: 'basic-needs' },
+]
+
 function cleanLine(raw) {
   return raw.replace(CHECKBOX_REGEX, '').trim()
+}
+
+function formatFreshness(iso) {
+  if (!iso) return 'never synced'
+  const then = new Date(iso).getTime()
+  const mins = Math.round((Date.now() - then) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.round(hrs / 24)
+  return `${days}d ago`
 }
 
 async function extractLinesFromPdf(file) {
@@ -43,7 +62,61 @@ export default function Load({ deck, setDeck, setScreen }) {
   const [parsing, setParsing] = useState(false)
   const [error, setError] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [bakedMeta, setBakedMeta] = useState({})
   const fileRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(
+      BAKED_LISTS.map(async (l) => {
+        try {
+          const res = await fetch(`/lists/${l.slug}.json`, { cache: 'no-store' })
+          if (!res.ok) return [l.slug, null]
+          const data = await res.json()
+          return [l.slug, { fetchedAt: data.fetchedAt, count: (data.cards || []).length }]
+        } catch {
+          return [l.slug, null]
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return
+      const next = {}
+      for (const [slug, meta] of entries) if (meta) next[slug] = meta
+      setBakedMeta(next)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  async function loadBakedList(slug, name) {
+    setError(null)
+    setParsing(true)
+    setPreview(null)
+    try {
+      const res = await fetch(`/lists/${slug}.json`, { cache: 'no-store' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const cards = (data.cards || []).map((c, i) => ({
+        id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        label: c.label,
+        list: data.name || name,
+        description: c.description || '',
+      }))
+      if (cards.length === 0) throw new Error('List is empty')
+      setBakedMeta((m) => ({ ...m, [slug]: { fetchedAt: data.fetchedAt, count: cards.length } }))
+      stageDeck(cards, data.name || name)
+      setPreview({
+        lines: cards.length,
+        cards: cards.length,
+        source: data.name || name,
+        fetchedAt: data.fetchedAt,
+        sample: cards.slice(0, 5).map((c) => c.label),
+      })
+    } catch (err) {
+      setError(`Couldn't load ${name}: ${err.message}. Run \`./scripts/sync-lists.sh\` on your Mac, then commit + push.`)
+    } finally {
+      setParsing(false)
+    }
+  }
 
   function makeCards(lines, source) {
     return lines
@@ -117,7 +190,33 @@ export default function Load({ deck, setDeck, setScreen }) {
   return (
     <div className="load">
       <h1>Load reminders</h1>
-      <p className="hint">Stopgap: upload a PDF or paste text. Native integration coming later.</p>
+      <p className="hint">Tap a list to load it. Re-sync from Mac when you want fresh data.</p>
+
+      <div className="load-section">
+        <label className="load-label">My lists</label>
+        <div className="baked-lists">
+          {BAKED_LISTS.map((l) => (
+            <button
+              key={l.slug}
+              className="baked-list-btn"
+              onClick={() => loadBakedList(l.slug, l.name)}
+              disabled={parsing}
+            >
+              <span className="baked-list-name">{l.name}</span>
+              {bakedMeta[l.slug] ? (
+                <span className="baked-list-meta">
+                  {bakedMeta[l.slug].count} · {formatFreshness(bakedMeta[l.slug].fetchedAt)}
+                </span>
+              ) : (
+                <span className="baked-list-meta">not synced</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="load-sub">
+          Refresh: <code>./scripts/sync-lists.sh</code> on Mac → <code>git push</code>.
+        </p>
+      </div>
 
       <div className="load-section">
         <label className="load-label">Source label (optional)</label>
