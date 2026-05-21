@@ -309,6 +309,75 @@ main {
 .pile-card.skip { border-left-color: var(--skip); }
 .pile-card.blocked { border-left-color: var(--blocked); }
 .pile-card.drop { border-left-color: var(--drop); }
+.pile-card .card-text { font-size: 14px; line-height: 1.4; }
+.pile-card .card-comment {
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+  padding-left: 8px;
+  border-left: 2px solid var(--rule);
+}
+
+/* Unblock with comment */
+.unblock-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  border: 1px dashed var(--blocked);
+  color: var(--blocked);
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+.unblock-btn:active { background: rgba(244, 162, 97, 0.12); }
+
+.unblock-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.unblock-form textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--blocked);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 70px;
+}
+.unblock-form textarea:focus { outline: 1px solid var(--engage); border-color: var(--engage); }
+.unblock-form textarea::placeholder { color: var(--ink-muted); }
+
+.unblock-actions { display: flex; gap: 8px; }
+.unblock-actions button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-soft);
+  color: var(--ink);
+}
+.unblock-actions .submit {
+  background: var(--engage);
+  color: var(--bg);
+  border-color: var(--engage);
+}
+.unblock-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 .pile-list .empty {
   text-align: center;
   color: var(--ink-soft);
